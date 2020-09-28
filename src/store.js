@@ -3,6 +3,7 @@ import devtoolPlugin from './plugins/devtool'
 import ModuleCollection from './module/module-collection'
 import { forEachValue, isObject, isPromise, assert, partial } from './util'
 
+// install方法调用时传入的Vue构造函数
 let Vue // bind on install
 
 export class Store {
@@ -10,6 +11,8 @@ export class Store {
     // Auto install if it is not done yet and `window` has `Vue`.
     // To allow users to avoid auto-installation in some cases,
     // this code should be placed here. See #731
+    // 浏览器环境下可以不需要Vue.use(Vuex)
+    // 在new Store时会判断用户有无安装Vuex，没有的话自动安装
     if (!Vue && typeof window !== 'undefined' && window.Vue) {
       install(window.Vue)
     }
@@ -38,6 +41,7 @@ export class Store {
     this._makeLocalGettersCache = Object.create(null)
 
     // bind commit and dispatch to self
+    // 硬绑定store实例到`dispatch`和`commit`方法
     const store = this
     const { dispatch, commit } = this
     this.dispatch = function boundDispatch (type, payload) {
@@ -102,6 +106,7 @@ export class Store {
       })
     })
 
+    // commit后的钩子方法
     this._subscribers
       .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
       .forEach(sub => sub(mutation, this.state))
@@ -134,6 +139,7 @@ export class Store {
     }
 
     try {
+      // dispatch触发后，异步触发前的钩子方法
       this._actionSubscribers
         .slice() // shallow copy to prevent iterator invalidation if subscriber synchronously calls unsubscribe
         .filter(sub => sub.before)
@@ -178,10 +184,12 @@ export class Store {
     })
   }
 
+  // 添加commit钩子
   subscribe (fn, options) {
     return genericSubscribe(fn, this._subscribers, options)
   }
 
+  // 添加action钩子
   subscribeAction (fn, options) {
     const subs = typeof fn === 'function' ? { before: fn } : fn
     return genericSubscribe(subs, this._actionSubscribers, options)
@@ -200,6 +208,7 @@ export class Store {
     })
   }
 
+  // 动态注册模块
   registerModule (path, rawModule, options = {}) {
     if (typeof path === 'string') path = [path]
 
@@ -214,6 +223,7 @@ export class Store {
     resetStoreVM(this, this.state)
   }
 
+  // 删除动态注册的某个模块
   unregisterModule (path) {
     if (typeof path === 'string') path = [path]
 
@@ -266,6 +276,7 @@ function genericSubscribe (fn, subs, options) {
   }
 }
 
+// 重置仓库回初始状态
 function resetStore (store, hot) {
   store._actions = Object.create(null)
   store._mutations = Object.create(null)
@@ -312,10 +323,12 @@ function resetStoreVM (store, state, hot) {
   Vue.config.silent = silent
 
   // enable strict mode for new vm
+  // 确保只用mutation方法提交修改
   if (store.strict) {
     enableStrictMode(store)
   }
 
+  // 销毁上次的vm
   if (oldVm) {
     if (hot) {
       // dispatch changes in all subscribed watchers
@@ -352,6 +365,9 @@ function installModule (store, rootState, path, module, hot) {
           )
         }
       }
+      // 为什么要用Vue.set方法
+      // 而不是parentState[moduleName] = module.state
+      // 因为$$state对象已经拥有__ob__属性了，在下次new Vue的时候会跳过$$state内部的新增数据，所以需要使用Vue.set方法为新增state添加响应式
       Vue.set(parentState, moduleName, module.state)
     })
   }
@@ -364,6 +380,7 @@ function installModule (store, rootState, path, module, hot) {
   })
 
   module.forEachAction((action, key) => {
+    // 如果设置root属性，则不拼接namespace
     const type = action.root ? key : namespace + key
     const handler = action.handler || action
     registerAction(store, type, handler, local)
@@ -374,6 +391,7 @@ function installModule (store, rootState, path, module, hot) {
     registerGetter(store, namespacedType, getter, local)
   })
 
+  // 递归注册
   module.forEachChild((child, key) => {
     installModule(store, rootState, path.concat(key), child, hot)
   })
@@ -383,6 +401,7 @@ function installModule (store, rootState, path, module, hot) {
  * make localized dispatch, commit, getters and state
  * if there is no namespace, just use root ones
  */
+// 配置使得模块内部调用时传参是当前模块的数据方法
 function makeLocalContext (store, namespace, path) {
   const noNamespace = namespace === ''
 
@@ -522,6 +541,7 @@ function getNestedState (state, path) {
   return path.reduce((state, key) => state[key], state)
 }
 
+// 格式化传参，支持传入整个对象或者单个参数
 function unifyObjectStyle (type, payload, options) {
   if (isObject(type) && type.type) {
     options = payload
@@ -537,6 +557,7 @@ function unifyObjectStyle (type, payload, options) {
 }
 
 export function install (_Vue) {
+  // 反复安装报错
   if (Vue && _Vue === Vue) {
     if (__DEV__) {
       console.error(
